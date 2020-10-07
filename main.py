@@ -1,66 +1,61 @@
-import face_recognition
+# Thanks to dataset provider:Copyright(c) 2018, seeprettyface.com, BUPT_GWY contributes the dataset.
+
 import cv2
 import numpy as np
-import os
-import sys
+import pymysql
+
+from FaceThread import FaceThread
 
 video_capture = cv2.VideoCapture(0)
-known_face_encodings = []
-known_face_names = []
 
-allImage = os.listdir()
-for image in allImage:
-    if image.endswith(".jpg"):
-        find_image = face_recognition.load_image_file(image)
-        known_face_encodings.append(face_recognition.face_encodings(find_image)[0])
-        known_face_names.append(image.replace(".jpg", ""))
+db = pymysql.connect("songcm.cn", "root", "D2018shu!", "face_recognition")
+print("载入中!", end=" ")
+
+try:
+    cursor = db.cursor()
+    cursor.execute("SELECT count(*) FROM `faceset`;")
+    sum = cursor.fetchone()[0]
+
+    for num in range(sum // 1000 + 1):
+        if num != 0:
+            cursor.execute("SELECT * FROM `faceset` LIMIT " + str(num) + "000, 1000;")
+        else:
+            cursor.execute("SELECT * FROM `faceset` LIMIT 0, 1000")
+        results = cursor.fetchall()
+        for result in results:
+            FaceThread.known_face_names.append(result[1])
+            ndarray = np.frombuffer(result[2], dtype=np.float)
+            FaceThread.known_face_encodings.append(ndarray)
+        print("\r载入中!....%.1f" % ((num + 1) / (sum // 1000 + 1) * 100) + "%", end=" ")
+
+except Exception as e:
+    print(e)
+    db.rollback()
+finally:
+    db.close()
+    print()
+
 
 # Initialize some variables
-face_locations = []
-face_encodings = []
-face_names = []
-process_this_frame = True
+process_this_frame = 0
+cv2.namedWindow("Video")
 
 while True:
     # Grab a single frame of video
     ret, frame = video_capture.read()
+    print("%s:get the frame" % process_this_frame)
 
-    # Resize frame of video to 1/4 size for faster face recognition processing
-    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+    if process_this_frame % 100 == 0:
+        faceThreadNew = FaceThread(process_this_frame, frame)
+        faceThreadNew.start()
+    process_this_frame = process_this_frame + 1
 
-    # Convert the image from BGR color (which OpenCV uses) to RGB color (which face_recognition uses)
-    rgb_small_frame = small_frame[:, :, ::-1]
-
-    # Only process every other frame of video to save time
-    if process_this_frame:
-        # Find all the faces and face encodings in the current frame of video
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
-
-        face_names = []
-        for face_encoding in face_encodings:
-            # See if the face is a match for the known face(s)
-            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-            name = "Unknown"
-
-            # # If a match was found in known_face_encodings, just use the first one.
-            # if True in matches:
-            #     first_match_index = matches.index(True)
-            #     name = known_face_names[first_match_index]
-
-            # Or instead, use the known face with the smallest distance to the new face
-            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-            best_match_index = np.argmin(face_distances)
-            if matches[best_match_index]:
-                name = known_face_names[best_match_index]
-
-            face_names.append(name)
-
-    process_this_frame = not process_this_frame
-
-
-    # Display the results
-    for (top, right, bottom, left), name in zip(face_locations, face_names):
+    print("len of face_locations_class: %d, len of face_names_class: %d" % (
+            len(FaceThread.face_locations_class),
+            len(FaceThread.face_names_class)
+    ))
+    for (top, right, bottom, left), name in zip(FaceThread.face_locations_class,
+                                                FaceThread.face_names_class):
         # Scale back up face locations since the frame we detected in was scaled to 1/4 size
         top *= 4
         right *= 4
@@ -75,10 +70,7 @@ while True:
         font = cv2.FONT_HERSHEY_DUPLEX
         cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
-    # Display the resulting image
     cv2.imshow('Video', frame)
-
-    # Hit 'q' on the keyboard to quit!
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
