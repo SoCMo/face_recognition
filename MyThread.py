@@ -6,7 +6,7 @@ import pymysql
 
 class myThread(threading.Thread):
     filePath = ""
-    sql = "INSERT INTO `face_recognition`.`faceset` (`name`, `encoding`) VALUES (%s, %s);"
+    sql = "INSERT INTO `face_recognition_dev`.`faceset` (`name`, `encoding`) VALUES (%s, %s);"
     threadLock = threading.Lock()
 
     def __init__(self, threadID, name, counter):
